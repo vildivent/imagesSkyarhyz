@@ -1,11 +1,11 @@
 import cors from "cors";
 import type { Request, Response } from "express";
 import express from "express";
-import fs, { mkdir } from "fs";
+import fs from "fs";
 import path from "path";
 import probe from "probe-image-size";
-import { load } from "ts-dotenv";
 import {
+  deleteUnauth,
   deletionFailed,
   nofile,
   readError,
@@ -13,32 +13,15 @@ import {
   unauth,
   wrongType,
 } from "./lib/messages";
-import {
-  ErrorTypes,
-  checkToken,
-  checkType,
-  createImagePaths,
-  deleteFile,
-  parseUploadBody,
-  saveImage,
-  saveImageDB,
-  upload,
-} from "./lib/utils";
+import upload from "./lib/middlewares/upload";
 import type { UploadRes } from "./types";
-
-const env = load({
-  PORT: Number,
-  IMAGES_SECRET: String,
-  BASE_URL: String,
-  ORIGIN: String,
-});
-const PORT = env.PORT;
-const BASE_URL = env.BASE_URL;
-const SECRET = env.IMAGES_SECRET;
-const ORIGIN = env.ORIGIN;
+import { deleteFileAsync, env, moveFileAsync } from "./utils";
+import { ErrorTypes } from "./lib/constants";
+import { checkType, createImagePaths, parseUploadBody } from "./lib/helpers";
+import { checkToken, saveImageDB } from "./lib/services";
 
 const options: cors.CorsOptions = {
-  origin: ORIGIN,
+  origin: env.ORIGIN,
   preflightContinue: true,
 };
 
@@ -64,22 +47,20 @@ app.get(`/:entity/:folder/:id`, (req, res) => {
   return res.status(400).json({ success: false, message: nofile });
 });
 
-app.delete(`/:entity/:folder/:id`, (req, res) => {
-  if (req.body?.secret !== SECRET)
-    return res
-      .status(401)
-      .json({ success: false, message: "Доступ запрещён!" });
-
-  const filepath = path.join(
-    "./files",
-    req.params.entity,
-    req.params.folder,
-    req.params.id
-  );
-  const dir = path.join("./files", req.params.entity, req.params.folder);
-
+app.delete(`/:entity/:folder/:id`, async (req, res) => {
   try {
-    fs.rmSync(dir, { recursive: true });
+    if (req.body?.secret !== env.IMAGES_SECRET)
+      return res.status(401).json({ success: false, message: deleteUnauth });
+
+    const filepath = path.join(
+      "./files",
+      req.params.entity,
+      req.params.folder,
+      req.params.id
+    );
+
+    await deleteFileAsync(filepath, true);
+
     return res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, message: deletionFailed });
@@ -102,22 +83,22 @@ app.post("/upload", upload, async (req: Request, res: Response<UploadRes>) => {
     if (!checkType(file.mimetype)) throw new Error(ErrorTypes.wrongType);
 
     const { width, height } = await probe(fs.createReadStream(file.path));
-    const { imageURLPath, imagePath, folderPath } = createImagePaths(
+    const { imageURLPath, imagePath } = createImagePaths(
       decodeURI(file.originalname),
       entity
     );
     const { imageId } = await saveImageDB(
       userId,
-      `${BASE_URL}/${imageURLPath}`,
+      `${env.BASE_URL}/${imageURLPath}`,
       width / height
     );
 
-    await saveImage(file.path, imagePath, folderPath);
+    await moveFileAsync(file.path, imagePath);
 
     return res.status(200).json({ success: true, imageId });
   } catch (error) {
     console.log(error);
-    if (file?.path) await deleteFile(file.path);
+    if (file?.path) await deleteFileAsync(file.path);
     if (error instanceof probe.Error)
       return res.status(400).json({ success: false, message: readError });
     if (error instanceof Error) {
@@ -132,6 +113,6 @@ app.post("/upload", upload, async (req: Request, res: Response<UploadRes>) => {
   }
 });
 
-app.listen(PORT, () =>
-  console.log(`Application is running at http://localhost:${PORT}`)
+app.listen(env.PORT, () =>
+  console.log(`Application is running at http://localhost:${env.PORT}`)
 );
