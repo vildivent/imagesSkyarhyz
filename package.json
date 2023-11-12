@@ -14,6 +14,7 @@
     "@types/cors": "^2.8.12",
     "@types/express": "^4.17.14",
     "@types/express-fileupload": "^1.4.1",
+    "@types/multer": "^1.4.10",
     "@types/node": "^18.11.9",
     "@types/object-hash": "^2.2.1",
     "@types/probe-image-size": "^7.2.3",
@@ -21,11 +22,8 @@
     "typescript": "^4.9.3"
   },
   "dependencies": {
-    "@types/multer": "^1.4.9",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "express-fileupload": "^1.4.0",
-    "image-size": "^1.0.2",
     "multer": "^1.4.5-lts.1",
     "probe-image-size": "^7.2.3",
     "ts-dotenv": "^0.9.1",
